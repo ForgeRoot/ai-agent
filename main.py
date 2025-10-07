@@ -33,7 +33,17 @@ def main():
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
 
-    generate_content(client, messages, verbose)
+    try:
+        for i in range(0,20):
+            response = generate_content(client, messages, verbose)
+            content = response.candidates[0].content
+            parts = getattr(content, "parts", []) or []
+            final_text = "".join(p.text for p in parts if hasattr(p, "text") and p.text)
+            if not response.function_calls and final_text:
+                print(final_text)
+                break
+    except Exception as e:
+        return Exception(f"ERROR: {e}")
 
 
 def generate_content(client, messages, verbose):
@@ -45,12 +55,14 @@ def generate_content(client, messages, verbose):
         ),
     )
 
+    messages.append(response.candidates[0].content)
+
     if verbose:
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
     if not response.function_calls:
-        return response.text
+        return response
 
     function_responses = []
     for function_call in response.function_calls:
@@ -64,8 +76,11 @@ def generate_content(client, messages, verbose):
             print(f"-> {function_call_result.parts[0].function_response.response}")
         function_responses.append(function_call_result.parts[0])
     
+    messages.append(types.Content(role="user", parts=function_responses))
+        
     if not function_responses:
         raise Exception("no function responses generated, exiting")
+    return response
             
 if __name__ == "__main__":
     main()
