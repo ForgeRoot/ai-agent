@@ -7,6 +7,7 @@ from functions.get_files_info import schema_get_files_info
 from functions.get_file_content import schema_get_file_content
 from functions.run_python_file import schema_run_python_file
 from functions.write_file import schema_write_file
+from functions.call_function import call_function
 
 def main():
     load_dotenv()
@@ -39,14 +40,6 @@ You are a code assistant that can perform these operations:
 
 When a user asks you to run a Python file without specifying arguments, call the function with just the file_path and omit the args parameter.
 """
-    available_functions = types.Tool(
-        function_declarations=[
-            schema_get_files_info,
-            schema_get_file_content,
-            schema_run_python_file,
-            schema_write_file
-        ]
-    )
     response = generate_response(client, messages, system_prompt, available_functions)
 
     if args[-1] == "--verbose":
@@ -58,6 +51,12 @@ When a user asks you to run a Python file without specifying arguments, call the
     if getattr(response, "function_calls", None):
         for fc in response.function_calls:
             print(f"Calling function: {fc.name}({fc.args})")
+            function_call_result = call_function(fc)
+            if not function_call_result.parts[0].function_response.response:
+                raise Exception("Response is not valid")
+            if args[-1] == "--verbose":
+                print(f"-> {function_call_result.parts[0].function_response.response}")
+            
     else:
         print(response.text)
 
