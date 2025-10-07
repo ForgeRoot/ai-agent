@@ -3,7 +3,10 @@ import sys
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-
+from functions.get_files_info import schema_get_files_info
+from functions.get_file_content import schema_get_file_content
+from functions.run_python_file import schema_run_python_file
+from functions.write_file import schema_write_file
 
 def main():
     load_dotenv()
@@ -27,7 +30,24 @@ def main():
     messages = [
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
-    response = generate_response(client, messages)
+    system_prompt = """
+You are a code assistant that can perform these operations:
+- List files and directories
+- Read file contents  
+- Execute Python files (with or without arguments)
+- Write or overwrite files
+
+When a user asks you to run a Python file without specifying arguments, call the function with just the file_path and omit the args parameter.
+"""
+    available_functions = types.Tool(
+        function_declarations=[
+            schema_get_files_info,
+            schema_get_file_content,
+            schema_run_python_file,
+            schema_write_file
+        ]
+    )
+    response = generate_response(client, messages, system_prompt, available_functions)
 
     if args[-1] == "--verbose":
         print(f"User prompt: {user_prompt}")
@@ -35,12 +55,17 @@ def main():
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
     print("Response:")
-    print(response.text)
+    if getattr(response, "function_calls", None):
+        for fc in response.function_calls:
+            print(f"Calling function: {fc.name}({fc.args})")
+    else:
+        print(response.text)
 
-def generate_response(client, messages):
+def generate_response(client, messages, system_prompt, available_functions):
     return client.models.generate_content(
         model="gemini-2.0-flash-001", 
-        contents=messages
+        contents=messages,
+        config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt)
     )
 
 if __name__ == "__main__":
