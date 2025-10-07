@@ -1,7 +1,41 @@
 import os
-import sys
 import subprocess
 from google.genai import types
+
+
+def run_python_file(working_directory, file_path, args=[]):
+    abs_working_dir = os.path.abspath(working_directory)
+    abs_file_path = os.path.abspath(os.path.join(working_directory, file_path))
+    if not target_file.startswith(abs_working_dir):
+        return f'Error: Cannot execute "{file_path}" as it is outside the permitted working directory'
+    if not os.path.exists(abs_file_path):
+        return f'Error: File "{file_path}" not found.'
+    if not target_file.endswith(".py"):
+        return f'Error: "{abs_file_path}" is not a Python file.'
+    try:
+        commands = ["python", abs_file_path]
+        if args:
+            commands.extend(args)
+        result = subprocess.run(
+            commands, 
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=abs_working_dir, 
+        )
+        output = []
+        if result.stdout:
+            output.append(f"STDOUT: {result.stdout}")
+        if result.stderr:
+            output.append(f"STDERR: {result.stderr}")
+
+        if result.returncode != 0:
+            output.append(f"Process exited with code {result.returncode}")
+
+        return "\n".join(output) if output else "No output produced."
+    except Exception as e:
+        return f"Error: executing Python file: {e}"
+    
 
 schema_run_python_file = types.FunctionDeclaration(
     name="run_python_file",
@@ -15,41 +49,13 @@ schema_run_python_file = types.FunctionDeclaration(
             ),
             "args": types.Schema(
                 type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.STRING
+                    description="Optional arguments to pass to the python file."
+                )
                 description="Optional arguments to pass to the Python file. Can be omitted if no arguments are needed.",
-                items=types.Schema(type=types.Type.STRING)
             )
         },
         required=["file_path"],
     ),
 )
-
-def run_python_file(working_directory, file_path, args=[]):
-    target_file = os.path.abspath(os.path.join(working_directory, file_path))
-    working_dir_path = os.path.abspath(working_directory)
-
-    if not target_file.startswith(working_dir_path):
-        return f'Error: Cannot execute "{file_path}" as it is outside the permitted working directory'
-    
-    if not os.path.exists(target_file):
-        return f'Error: File "{file_path}" not found.'
-
-    if not target_file.endswith(".py"):
-        return f'Error: "{file_path}" is not a Python file.'
-
-    try:
-        result = subprocess.run([sys.executable, target_file] + args, cwd=working_directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-
-        return_list = []
-        if result.stdout:
-            return_list.append(f"STDOUT: {result.stdout.decode("utf-8")}")
-        if result.stderr:
-            return_list.append(f"STDERR: {result.stderr.decode("utf-8")}")
-        if result.returncode != 0:
-            return_list.append(f"Process exited with code {result.returncode}")
-        if not return_list:
-            return "No output produced."
-        else:
-            return "\n".join(return_list)
-    except Exception as e:
-        return f"Error: executing Python file: {e}"
-    
